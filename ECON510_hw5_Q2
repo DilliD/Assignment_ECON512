@@ -1,0 +1,98 @@
+clear; clc;
+
+% Hyper-Parameters
+a = 0.05;
+b = 0.05;
+cv_a_os = icdf('normal', 1-a, 0, 1); % One-sided Test
+cv_a_ts = icdf('normal', 1-0.5*a, 0, 1); % Two-sided Test
+cv_b = icdf('chi2',1-b, 1);
+k = 5; one_k = ones(k,1);
+theta = 0; theta1 = 1;
+V0=eye(k+2);
+simlim = 1000;
+
+% n = 100, 500
+% h1 = 0, 3, 8
+% h2 = 0.1, 1, 10
+set_n = [100, 500]';
+set_h1 = [0, 3, 8]'; set_h2 = [0.1, 1, 10]';
+setup = [ kron([1;2], ones(9,1)), repmat(kron([1;2;3], ones(3,1)), [2,1]), repmat([1;2;3],[6,1])];
+latex_result=[];
+for simset=1:18
+    idx = setup(simset,:);
+    % Model Parameters
+    n = set_n(idx(1,1),:); sqrtn = sqrt(n);
+    h1 = set_h1(idx(1,2),:); % Corr(u, v)
+    h2 = set_h2(idx(1,3),:); % Corr(x, z)
+    pi = h2*one_k;
+    V = V0; V(1,2) = h1/sqrtn; V(2,1) = h1/sqrtn;
+
+    for simiter=1:simlim
+        % Data-Generation
+        uvz = randn(n,k+2)*chol(V)';
+        u = uvz(:,1); v = uvz(:,2); z = uvz(:,3:end);
+        x = z*pi + v; y = x*theta + u;
+
+        % OLS
+        invxx = 1/(x'*x);
+        b_ols = invxx*x'*y; % OLS Estimator
+        u_ols = y-x*b_ols; % OLS Residual
+        h_ols = (x.*u_ols)*(invxx)/sqrtn; % Linear Expression of OLS Estimator
+        v_ols = invxx*(x'*((u_ols.^2).*x))*invxx; % OLS HR Variance
+
+        % TSLS
+        invzz = inv(z'*z); xz = x'*z;
+        invxpx = inv(xz*invzz*xz');
+        b_tsls = invxpx*xz*invzz*z'*y; % TSLS Estimator
+        u_tsls = y-x*b_tsls; % TSLS Residual
+        h_tsls = (z.*u_tsls)*((invxpx)*(xz*invzz))'/sqrtn; % Lineaer Expression
+        v_tsls = invxpx*(xz*invzz*(z'*((u_tsls.^2).*z))*invzz*xz')*invxpx; % TSLS HR Variance
+
+        % Hausman Statistics
+        % Hn(simiter,:) = (b_tsls - b_ols)'*inv(v_tsls - v_ols)*(b_tsls - b_ols); % Hausman Statstics (not considering asymptotic covariance)
+        Hn = n*(b_tsls - b_ols)'*inv( (h_tsls-h_ols)'*(h_tsls-h_ols) )*(b_tsls - b_ols); % Hausman Statistics (considering asymptotic covariance)
+
+        % Two-Stage Test Stat
+        % Under the H0
+        t_ols0 = (b_ols - theta)./sqrt(diag(v_ols));
+        t_tsls0 = (b_tsls - theta)./sqrt(diag(v_tsls));
+        stat0 = t_ols0.*(Hn<=cv_b) + t_tsls0.*(Hn>cv_b);
+        % Under the HA
+        t_ols1 = (b_ols - theta1)./sqrt(diag(v_ols));
+        t_tsls1 = (b_tsls - theta1)./sqrt(diag(v_tsls));
+        stat1 = t_ols1.*(Hn<=cv_b) + t_tsls1.*(Hn>cv_b);
+
+        result(simiter,:) = [Hn, stat0, stat1, b_ols, b_tsls];
+    end
+    disp("========================")
+    disp("<Simulation Setup>")
+    disp(" n = "+num2str(n));
+    disp(" h1 = "+num2str(h1));
+    disp(" h2 = "+num2str(h2));
+    disp("------------------------")
+    disp(" bias of OLS = "+num2str( round(mean(result(:,4)-0),3) ))
+    disp(" bias of TSLS = "+num2str( round(mean(result(:,5)-0),3) ))
+    disp(" min[Hn] = "+num2str( round(min(result(:,1)),3) ))
+    disp(" max[Hn] = "+num2str( round(max(result(:,1)),3) ))
+    disp(" E[t*] under wrong null = "+num2str( round(mean(result(:,3)),3) ))
+    disp("------------------------")
+    disp( "Under True Null")
+    disp(" Pr[t* > z(0.95)]= "+num2str( round(mean(result(:,2)>cv_a_os),3) ))
+    disp(" Pr[ |t*| > z(0.975) ] = "+num2str( round(mean(abs(result(:,2))>cv_a_ts),3) ))
+    disp("------------------------")
+    disp( "Under Wrong Null")
+    disp(" Pr[t* > z(0.95)]= "+num2str( round(mean(result(:,3)>cv_a_os),3) ))
+    disp(" Pr[ |t*| > z(0.975) ] = "+num2str( round(mean(abs(result(:,3))>cv_a_ts),3) ))
+    disp("------------------------")
+    disp( "Pr[Hn > x2(1,0.99)] = "+num2str(mean(result(:,1)>icdf('chi2',0.99,1)))  );
+    disp( "Pr[Hn > x2(1,0.95)] = "+num2str(mean(result(:,1)>icdf('chi2',0.95,1)))  );
+    disp( "Pr[Hn > x2(1,0.90)] = "+num2str(mean(result(:,1)>icdf('chi2',0.90,1)))  );
+    disp("========================")
+    disp(" ")
+    disp(" ")
+    disp(" ")
+
+    result0 = round([mean(result(:,4:5)-0,1), min(result(:,1)), max(result(:,1)), mean(result(:,3)), mean(result(:,2)>cv_a_os), mean(abs(result(:,2))>cv_a_os), mean(result(:,3)>cv_a_os), mean(abs(result(:,3))>cv_a_os), mean(result(:,1)>icdf('chi2',0.90,1)), mean(result(:,1)>icdf('chi2',0.95,1)), mean(result(:,1)>icdf('chi2',0.99,1))],3);
+    latex_result = [latex_result; num2str(n)+"&"+num2str(h1)+"&"+num2str(h2)+"&"+num2str(result0(:,1))+"&"+num2str(result0(:,2))+"&"+num2str(result0(:,3))+"&"+num2str(result0(:,4))+"&"+num2str(result0(:,5))+"&"+num2str(result0(:,6))+"&"+num2str(result0(:,7))+"&"+num2str(result0(:,8))+"&"+num2str(result0(:,9))+"&"+num2str(result0(:,10))+"&"+num2str(result0(:,11))+"&"+num2str(result0(:,12))+"\\"];
+end
+disp(latex_result)
