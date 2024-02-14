@@ -1,0 +1,64 @@
+clear; clc;
+
+% integer rule : (1-a)*(1+B) should be integer
+
+R = 5000; % # of Simulation Replication
+n = 100; % Sample Size
+B = 999; % # of Bootstrap Replication
+a = 0.05; % Test Size
+cv = icdf('normal', 1-0.5*a, 0, 1);
+
+% Parameters
+sig = 1;  one = ones(n,1); b0 = ones(5,1);
+
+parfor simiter=1:R
+    clc; disp(simiter)
+    % Data Generation
+    x = [one, randn(n,4)];
+    y = x*b0 + sig*randn(n,1);
+
+    % OLS
+    invxx = inv(x'*x);
+    bhat = invxx*x'*y;
+    uhat = y - x*bhat;
+    vcov = invxx*(x'*(uhat.*uhat.*x))*invxx;
+    se = sqrt(diag(vcov));
+    tv = (bhat - b0)./se;
+    ci95 = [b0 - cv*se, b0 + cv*se];
+
+    % Bootstrap
+    for b=1:B
+        % Residual Bootstrap
+        ub1 = datasample(uhat, n);
+        yb1 = x*bhat + ub1;
+        bhat_b1(:,b) = invxx*x'*yb1;
+        vcov_b1 = mean((yb1 - x*bhat_b1(:,b)).^2)*invxx;
+        se_b1(:,b) = sqrt(diag(vcov_b1));
+        tv_b1(:,b) = (bhat_b1(:,b) - bhat)./se_b1(:,b);
+
+        % Nonparametric Bootstrap
+        yxb = datasample([y,x],n);
+        yb2 = yxb(:,1);
+        xb2 = yxb(:,2:end);
+        invxbxb = inv(xb2'*xb2);
+        bhat_b2(:,b) = invxbxb*xb2'*yb2;
+        vcov_b2 = mean((yb2 - xb2*bhat_b2(:,b)).^2)*invxbxb;
+        se_b2(:,b) = sqrt(diag(vcov_b2));
+        tv_b2(:,b) = (bhat_b2(:,b) - bhat)./se_b2(:,b);
+
+    end
+
+    ci95_b1 = [prctile(bhat_b1', 2.5)', prctile(bhat_b1', 97.5)'];
+    ci95_b2 = [prctile(bhat_b2', 2.5)', prctile(bhat_b2', 97.5)'];
+
+    prctile(tv_b1, 95, 2);
+    prctile(tv_b1, 97.5, 2);
+    prctile(tv_b2, 95, 2);
+    prctile(tv_b2, 97.5, 2);
+
+    cvg0(:,simiter) = (b0>ci95(:,1)).*(b0<ci95(:,2));
+    cvg1(:,simiter) = (b0>ci95_b1(:,1)).*(b0<ci95_b1(:,2));
+    cvg2(:,simiter) = (b0>ci95_b2(:,1)).*(b0<ci95_b2(:,2));
+end
+
+disp([mean(cvg0,2), mean(cvg1,2), mean(cvg2,2)])
