@@ -1,0 +1,94 @@
+
+    k = set_k(idx(2,1),:);
+    rho = set_rho(idx(3,1),:);
+    eta = set_eta(idx(4,1),:);
+    eta = 1*(eta==1) + (1/sqrt(n))*(eta==2);
+
+    one = ones(n,1);
+
+    % true parameter
+    pi0 = eta*ones(k,1); b0 = 0;
+
+    % hyper-parameter for generating data
+    lambda = 0.5+0.1*rand(k,k); lambda = lambda*lambda';
+    omega = [[1,rho];[rho,1]];
+    sqrt_omega = chol(omega);
+    sqrt_lambda = chol(lambda);
+
+    bias = zeros(sim_lim,2);
+    std = zeros(sim_lim,2);
+    mse = zeros(sim_lim,2);
+    tv0 = zeros(sim_lim,2);
+
+    for simiter=1:sim_lim
+        % Data Generation
+        eu = randn(n,2)*sqrt_omega; % (e,u)~N(0, Omega)
+        z = randn(n,k)*sqrt_lambda; % z~N(0, Lambda)
+        x = z*pi0 + eu(:,1); % x = z'*pi0 + e
+        y = x*b0 + eu(:,2); % y = x*b0 + u
+        X = [one, x]; Z = [one, z];
+
+        xz = X'*Z; zz = Z'*Z; invzz = inv(zz); zy = Z'*y;
+
+        % estimator when An'An = identity
+        invxzWzx1 = inv(xz*xz');
+        bhat1 = invxzWzx1*(xz*zy); % estimator
+        u1 = y-X*bhat1; % residual
+        vcov1 = invxzWzx1*(xz*(Z'*((u1.^2).*Z))*xz')*invxzWzx1; % variance-covariance matrix
+        mse1 = mean(u1.^2); % mean-squared error
+
+        % estimator when An'An = Pz
+        invxzWzx2 = inv(xz*invzz*xz');
+        bhat2 = invxzWzx2*(xz*invzz*zy); % estimator
+        u2 = y-X*bhat2; % residual
+        vcov2 = invxzWzx2*(xz*invzz*(Z'*((u2.^2).*Z))*invzz*xz')*invxzWzx2; % variance-covariance matrix
+        mse2 = mean(u2.^2); %mean-squred error
+
+        % saving bias, std-err, tvalue under the true null, t-value under the
+        % wrong null, and mse for every simulation step
+        bias(simiter,:) = [bhat1(2,1) - b0, bhat2(2,1) - b0];
+        std(simiter,:) = [sqrt(vcov1(2,2)), sqrt(vcov2(2,2))];
+        tv0(simiter,:) = bias(simiter,:)./std(simiter,:);
+        tv1(simiter,:) = [bhat1(2,1) - 1, bhat2(2,1) - 1]./std(simiter,:);
+        mse(simiter,:) = [mse1, mse2];
+    end
+
+    % This is for making tables through LaTex
+    % result = round([mean(bias,1)', mean(std,1)', mean(mse,1)', mean(abs(tv1)>2.56,1)', mean(abs(tv1)>1.96,1)', mean(abs(tv1)>1.645,1)', mean(abs(tv0)>2.56,1)', mean(abs(tv0)>1.96,1)', mean(abs(tv0)>1.645,1)'],3);
+    % disp_result = [num2str(n)+"&"+num2str(k)+"&"+num2str(eta)+"&"+num2str(rho)+"&$\mathbf{I_{K}}$";
+    %     num2str(n)+"&"+num2str(k)+"&"+num2str(eta)+"&"+num2str(rho)+"&$\mathbf{Z'Z/n}$"];
+    % disp_result = disp_result+"&"+num2str(result(:,1))+"&"+num2str(result(:,2))+"&"+num2str(result(:,3))+"&"+num2str(result(:,4))+"&"+num2str(result(:,5))+"&"+num2str(result(:,6))+"&"+num2str(result(:,7))+"&"+num2str(result(:,8))+"&"+num2str(result(:,9))+"\\";
+    % disp(disp_result)
+    
+    disp("===================")
+    disp("Simulation <"+num2str(index)+">")
+    disp("n = "+num2str(n))
+    disp("k = "+num2str(k))
+    disp("eta = "+num2str(eta))
+    disp("rho = "+num2str(rho))
+    disp("===================")
+    disp("      An'An = eye     An'An = Pz")
+    disp("bias : "+num2str( round(mean(bias,1), lowerbdd)))
+    disp("std : "+num2str( round(mean(std,1), lowerbdd)))
+    disp("mse : "+num2str( round(mean(mse,1), lowerbdd)))
+    disp("===================")
+    disp("Under H0 : b0 = 0 (true null)")
+    disp("                            An'An = eye     An'An = Pz")
+    disp("note : these values estimate test size")
+    disp("Pr[ |tv| > 2.56  under H0] : "+num2str( round(mean(abs(tv0)>2.56,1), lowerbdd)))
+    disp("Pr[ |tv| > 1.96 under H0] : "+num2str( round(mean(abs(tv0)>1.96,1), lowerbdd)))
+    disp("Pr[ |tv| > 1.645 under H0] : "+num2str( round(mean(abs(tv0)>1.645,1), lowerbdd)))
+    disp("===================")
+    disp("Under H0 : b0 = 1 (wrong null)")
+    disp("                            An'An = eye     An'An = Pz")
+    disp("note : these values estimate test power")
+    disp("Pr[ |tv| > 2.56  under H0] : "+num2str( round(mean(abs(tv1)>2.56,1), lowerbdd)))
+    disp("Pr[ |tv| > 1.96 under H0] : "+num2str( round(mean(abs(tv1)>1.96,1), lowerbdd)))
+    disp("Pr[ |tv| > 1.645 under H0] : "+num2str( round(mean(abs(tv1)>1.645,1), lowerbdd)))
+    disp("===================")
+    disp(" ")
+    disp(" ")
+    disp(" ")
+    disp(" ")
+
+end
