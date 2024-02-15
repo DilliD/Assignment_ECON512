@@ -2,7 +2,7 @@ clear; clc;
 
 % integer rule : (1-a)*(1+B) should be integer
 
-R = 5000; % # of Simulation Replication
+R = 10; % # of Simulation Replication
 n = 100; % Sample Size
 B = 999; % # of Bootstrap Replication
 a = 0.05; % Test Size
@@ -10,7 +10,9 @@ cv = icdf('normal', 1-0.5*a, 0, 1);
 
 % Parameters
 sig = 1;  one = ones(n,1); b0 = ones(5,1);
-
+cvg0=zeros(5,R);
+cvg1=zeros(5,R);
+cvg2=zeros(5,R);
 parfor simiter=1:R
     clc; disp(simiter)
     % Data Generation
@@ -27,6 +29,8 @@ parfor simiter=1:R
     ci95 = [b0 - cv*se, b0 + cv*se];
 
     % Bootstrap
+    bhat_b1 = []; se_b1=[]; tv_b1=[];
+    bhat_b2=[]; se_b2=[]; tv_b2=[];    
     for b=1:B
         % Residual Bootstrap
         ub1 = datasample(uhat, n);
@@ -50,15 +54,17 @@ parfor simiter=1:R
     ci95_b1 = [prctile(bhat_b1', 2.5)', prctile(bhat_b1', 97.5)'];
     ci95_b2 = [prctile(bhat_b2', 2.5)', prctile(bhat_b2', 97.5)'];
 
+    if R==1
     result0 = [tv, prctile(tv_b1, 95, 2), prctile(tv_b1, 97.5, 2), prctile(tv_b2, 95, 2), prctile(tv_b2, 97.5, 2)];
     result0 = round([result0, ci95, ci95_b1, ci95_b2],3);
 
     latex_result = num2str(result0(:,1))+"&"+num2str(result0(:,2))+"&"+num2str(result0(:,3))+"&"+num2str(result0(:,4))+"&"+num2str(result0(:,5))+"&"+num2str(result0(:,6))+"&"+num2str(result0(:,7))+"&"+num2str(result0(:,8))+"&"+num2str(result0(:,9))+"&"+num2str(result0(:,10))+"&"+num2str(result0(:,11))+"\\";
-
+    end
     cvg0(:,simiter) = (b0>ci95(:,1)).*(b0<ci95(:,2));
     cvg1(:,simiter) = (b0>ci95_b1(:,1)).*(b0<ci95_b1(:,2));
     cvg2(:,simiter) = (b0>ci95_b2(:,1)).*(b0<ci95_b2(:,2));
 end
 
-% disp(latex_result)
+if R==1; disp(latex_result); end
+
 disp([mean(cvg0,2), mean(cvg1,2), mean(cvg2,2)])
