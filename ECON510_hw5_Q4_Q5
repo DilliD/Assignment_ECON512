@@ -45,20 +45,20 @@ parfor simiter=1:R
         vcov_b2 = mean((yb2 - xb2*bhat_b2(:,b)).^2)*invxbxb;
         se_b2(:,b) = sqrt(diag(vcov_b2));
         tv_b2(:,b) = (bhat_b2(:,b) - bhat)./se_b2(:,b);
-
     end
 
     ci95_b1 = [prctile(bhat_b1', 2.5)', prctile(bhat_b1', 97.5)'];
     ci95_b2 = [prctile(bhat_b2', 2.5)', prctile(bhat_b2', 97.5)'];
 
-    prctile(tv_b1, 95, 2);
-    prctile(tv_b1, 97.5, 2);
-    prctile(tv_b2, 95, 2);
-    prctile(tv_b2, 97.5, 2);
+    result0 = [tv, prctile(tv_b1, 95, 2), prctile(tv_b1, 97.5, 2), prctile(tv_b2, 95, 2), prctile(tv_b2, 97.5, 2)];
+    result0 = round([result0, ci95, ci95_b1, ci95_b2],3);
+
+    latex_result = num2str(result0(:,1))+"&"+num2str(result0(:,2))+"&"+num2str(result0(:,3))+"&"+num2str(result0(:,4))+"&"+num2str(result0(:,5))+"&"+num2str(result0(:,6))+"&"+num2str(result0(:,7))+"&"+num2str(result0(:,8))+"&"+num2str(result0(:,9))+"&"+num2str(result0(:,10))+"&"+num2str(result0(:,11))+"\\";
 
     cvg0(:,simiter) = (b0>ci95(:,1)).*(b0<ci95(:,2));
     cvg1(:,simiter) = (b0>ci95_b1(:,1)).*(b0<ci95_b1(:,2));
     cvg2(:,simiter) = (b0>ci95_b2(:,1)).*(b0<ci95_b2(:,2));
 end
 
+% disp(latex_result)
 disp([mean(cvg0,2), mean(cvg1,2), mean(cvg2,2)])
