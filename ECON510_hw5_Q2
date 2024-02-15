@@ -92,7 +92,8 @@ for simset=1:18
     disp(" ")
     disp(" ")
 
-    result0 = round([mean(result(:,4:5)-0,1), min(result(:,1)), max(result(:,1)), mean(result(:,3)), mean(result(:,2)>cv_a_os), mean(abs(result(:,2))>cv_a_os), mean(result(:,3)>cv_a_os), mean(abs(result(:,3))>cv_a_os), mean(result(:,1)>icdf('chi2',0.90,1)), mean(result(:,1)>icdf('chi2',0.95,1)), mean(result(:,1)>icdf('chi2',0.99,1))],3);
-    latex_result = [latex_result; num2str(n)+"&"+num2str(h1)+"&"+num2str(h2)+"&"+num2str(result0(:,1))+"&"+num2str(result0(:,2))+"&"+num2str(result0(:,3))+"&"+num2str(result0(:,4))+"&"+num2str(result0(:,5))+"&"+num2str(result0(:,6))+"&"+num2str(result0(:,7))+"&"+num2str(result0(:,8))+"&"+num2str(result0(:,9))+"&"+num2str(result0(:,10))+"&"+num2str(result0(:,11))+"&"+num2str(result0(:,12))+"\\"];
+    result0 = round([mean(result(:,4:5)-0,1), prctile(result(:,1),50), mean(result(:,2)>cv_a_os), mean(abs(result(:,2))>cv_a_os), mean(result(:,3)>cv_a_os), mean(abs(result(:,3))>cv_a_os)],3);
+    latex_result = [latex_result; num2str(n)+"&"+num2str(h1)+"&"+num2str(h2)+"&"+num2str(result0(:,1))+"&"+num2str(result0(:,2))+"&"+num2str(result0(:,3))+"&"+num2str(result0(:,4))+"&"+num2str(result0(:,5))+"&"+num2str(result0(:,6))+"&"+num2str(result0(:,7))+"\\"];
 end
 disp(latex_result)
+ 
