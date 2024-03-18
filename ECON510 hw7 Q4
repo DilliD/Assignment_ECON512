@@ -1,0 +1,96 @@
+clear; clc; close all;
+
+S = 1000;
+OPTIONS.Display="final";
+OPTIONS.MaxFunEvals = 10^7;
+OPTIONS.MaxIter = 10^7;
+n= 500; p = 600;
+set_c1 = [0, 0.1];
+set_c2 = [0.1, 0.5];
+set_p1 = [400, 500, 570]/2;
+setup = [ kron([1;2], ones(6,1)), repmat(kron([1;2], ones(3,1)), [2,1]), repmat([1;2;3],[4,1])];
+O_Sby1=zeros(S,1); O_pbyS = zeros(p,S);
+
+% Lambda Choice
+num_lamb = 100; lamb_min = 0.2; lamb_max = 20;
+list_lamb = linspace(lamb_min, lamb_max, num_lamb)';
+% for iter1 = 1:size(setup,1)
+
+% for iter1 = 1:max(size(setup))
+for iter1 = 1
+    c1 = set_c1(setup(iter1,1));
+    c2 = set_c2(setup(iter1,2));
+    p1 = set_p1(setup(iter1,3));
+    p2 = p - p1;
+    b_true = [c1*ones(p1,1); c2*ones(p2,1)];
+
+    lamb_lss = O_Sby1; lamb_rr = O_Sby1;
+    err1_lss = O_Sby1; err2_lss= O_Sby1; err2n_lss= O_Sby1;
+    err1_rr = O_Sby1; err2_rr = O_Sby1; err2n_rr = O_Sby1;
+    b_lss = O_pbyS; b_rr = O_pbyS;
+
+    for simiter=1:S
+        disp(simiter)
+        % Data Generation
+        x = randn(n,p); y = x*b_true + randn(n,1);
+        xx = x'*x; xy = x'*y;
+        rsd = @(b)( (y - x*b) );
+        prd_norm = @(b)( sqrt( (b-b_true)'*(xx/n)*(b-b_true) ) );
+        get_mse = @(b)( mean( rsd(b).^2 ,1 ) );
+
+        % Closed Form Solution for Ridge Est.
+        get_rr = @(lambda)(  inv(xx + lambda*eye(p))*xy  );
+        % Obj functions for Ridge and Lasso
+        obj_rr = @(b,lambda)( (  mean(rsd(b).^2,1) + lambda*(b'*b )  ) );
+        obj_lss = @(b,lambda)( (  mean(rsd(b).^2,1) + lambda*norm(b,1)  ) );
+
+        b_rr_cv = zeros(p, num_lamb);
+        qmax_rr = zeros(1, num_lamb);
+        b_lss_cv = zeros(p, num_lamb);
+        qmax_lss = zeros(1,num_lamb);
+
+        parfor iter2 = 1:num_lamb
+            lamb0 = list_lamb(iter2,1);
+            b0 = get_rr(lamb0);
+
+            b_rr_cv(:,iter2) = b0;
+            qmax_rr(:,iter2) = obj_rr( b0, lamb0 );
+
+            obj_lss0 = @(b)( obj_lss(b, lamb0) );
+            [b_lss_cv(:,iter2), qmax_lss(:,iter2)] = fminsearch(obj_lss0, b0, OPTIONS);
+        end
+        [~,idx_lss] = max(qmax_lss');
+        [~,idx_rr] = max(qmax_rr');
+        lamb_lss(simiter,:) = list_lamb(idx_lss);
+        lamb_rr(simiter,:) = list_lamb(idx_rr);
+        b_lss(:,simiter) = b_lss_cv(:,idx_lss);
+        b_rr(:,simiter) = b_rr_cv(:,idx_rr);
+
+        err1_lss(simiter,:) = norm( rsd(b_lss(:,simiter)), 1);
+        err2_lss(simiter,:) = norm( rsd(b_lss(:,simiter)), 2);
+        err2n_lss(simiter,:) = prd_norm(b_lss(:,simiter));
+        err1_rr(simiter,:) = norm( rsd(b_rr(:,simiter)), 1);
+        err2_rr(simiter,:) = norm( rsd(b_rr(:,simiter)), 2);
+        err2n_rr(simiter,:) = prd_norm(b_rr(:,simiter));
+    end
+
+    figure;
+    scatter(lamb_rr, lamb_lss)
+    text(min(lamb_rr)+std(lamb_rr), max(lamb_lss)-std(lamb_lss),"c1 = "+num2str(c1)+", c2 = "+num2str(c2)+", p1 = "+num2str(p1)+", p2 = "+num2str(p2))
+    xlabel("\lambda_{Ridge}", 'fontsize', 20);
+    ylabel("\lambda_{LASSO}", 'fontsize', 20);
+
+    disp("=============================")
+    disp("c1 = "+num2str(c1)+", c2 = "+num2str(c2)+", p1 = "+num2str(p1)+", p2 = "+num2str(p2))
+    disp(" Pr[b_rr(1) = 0], Pr[b_rr(p) = 0] ")
+    disp( num2str( [ mean(abs(b_rr(1,:)')<0.00001,1), mean(abs(b_rr(end,:)')<0.00001,1) ] ) )
+    disp(" Pr[b_lasso(1) = 0], Pr[b_lasso(p) = 0] ")
+    disp( num2str( [ mean(abs(b_lss(1,:)')<0.00001,1), mean(abs(b_lss(end,:)')<0.00001,1) ] ) )
+    disp(" RR : 1-norm error , 2-norm error, 2,n-norm error")
+    disp(num2str(mean([err1_rr, err2_rr, err2n_rr],1)))
+    disp(" LASSO : 1-norm error , 2-norm error, 2,n-norm error")
+    disp(num2str(mean([err1_lss, err2_lss, err2n_lss],1)))
+    disp("===============================")
+    disp(" ")
+    disp(" ")
+end
