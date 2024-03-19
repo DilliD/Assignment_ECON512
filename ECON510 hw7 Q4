@@ -1,70 +1,84 @@
 clear; clc; close all;
 
-S = 1000;
-OPTIONS.Display="final";
-OPTIONS.MaxFunEvals = 10^7;
-OPTIONS.MaxIter = 10^7;
-n= 500; p = 600;
+% Original Hypter-Parameter
+% S = 1000;
+% n= 500; p = 600;
+% set_c1 = [0, 0.1];
+% set_c2 = [0.1, 0.5];
+% set_p1 = [400, 500, 570];
+% setup = [ kron([1;2], ones(6,1)), repmat(kron([1;2], ones(3,1)), [2,1]), repmat([1;2;3],[4,1])];
+
+% Modified Hyper-Parameter
+S = 100;
+n=150; p=200;
 set_c1 = [0, 0.1];
-set_c2 = [0.1, 0.5];
-set_p1 = [400, 500, 570]/2;
-setup = [ kron([1;2], ones(6,1)), repmat(kron([1;2], ones(3,1)), [2,1]), repmat([1;2;3],[4,1])];
-O_Sby1=zeros(S,1); O_pbyS = zeros(p,S);
+set_c2 = [0.5];
+set_p1 = [n-30, n+30];
+setup = [ kron([1;2], ones(2,1)), ones(4,1), repmat([1;2],[2,1])];
+
+K = 5;  nk = n*(K-1)/K;
+idx_set = reshape((1:1:n)', [n/K, K]);
+stepsize = 0.15; print_or_not = ""; maxiter = 2*10^4; threshold = 1/10^3;
 
 % Lambda Choice
-num_lamb = 100; lamb_min = 0.2; lamb_max = 20;
+num_lamb = 10; lamb_min = 10/n; lamb_max = 10;
 list_lamb = linspace(lamb_min, lamb_max, num_lamb)';
-% for iter1 = 1:size(setup,1)
 
-% for iter1 = 1:max(size(setup))
-for iter1 = 1
+O_Sby1=zeros(S,1); O_pbyS = zeros(p,S);
+
+for iter1 = 1:size(setup,1)
     c1 = set_c1(setup(iter1,1));
     c2 = set_c2(setup(iter1,2));
     p1 = set_p1(setup(iter1,3));
     p2 = p - p1;
     b_true = [c1*ones(p1,1); c2*ones(p2,1)];
 
-    lamb_lss = O_Sby1; lamb_rr = O_Sby1;
+    lamb_rr_cv = O_Sby1; lamb_lss_cv = O_Sby1;
     err1_lss = O_Sby1; err2_lss= O_Sby1; err2n_lss= O_Sby1;
     err1_rr = O_Sby1; err2_rr = O_Sby1; err2n_rr = O_Sby1;
     b_lss = O_pbyS; b_rr = O_pbyS;
+    obj_lss0 = []; rsd = []; prd_norm = []; q_rr=[]; q_lss=[];
 
     for simiter=1:S
-        disp(simiter)
-        % Data Generation
         x = randn(n,p); y = x*b_true + randn(n,1);
-        xx = x'*x; xy = x'*y;
-        rsd = @(b)( (y - x*b) );
-        prd_norm = @(b)( sqrt( (b-b_true)'*(xx/n)*(b-b_true) ) );
-        get_mse = @(b)( mean( rsd(b).^2 ,1 ) );
+        q_rr = zeros(num_lamb,1); q_lss = zeros(num_lamb,1);
 
-        % Closed Form Solution for Ridge Est.
-        get_rr = @(lambda)(  inv(xx + lambda*eye(p))*xy  );
-        % Obj functions for Ridge and Lasso
-        obj_rr = @(b,lambda)( (  mean(rsd(b).^2,1) + lambda*(b'*b )  ) );
-        obj_lss = @(b,lambda)( (  mean(rsd(b).^2,1) + lambda*norm(b,1)  ) );
-
-        b_rr_cv = zeros(p, num_lamb);
-        qmax_rr = zeros(1, num_lamb);
-        b_lss_cv = zeros(p, num_lamb);
-        qmax_lss = zeros(1,num_lamb);
-
-        parfor iter2 = 1:num_lamb
+        for iter2 = 1:num_lamb
+            disp("setup, simulation, lambda : "+num2str([iter1, simiter, iter2]))
             lamb0 = list_lamb(iter2,1);
-            b0 = get_rr(lamb0);
+            q_rr0 = zeros(K,1);
+            q_lss0 = zeros(K,1);
+            idx_del = []; idx0 = [];
+        
+            parfor k = 1:K % K-fold Cross Validation
+                idx0 = idx_set(:,k);
+                idx_del = idx_set; idx_del(:,k)=[]; idx_del = idx_del(:);
+                b0 = inv(x(idx_del,:)'*x(idx_del,:) + lamb0*eye(p))*x(idx_del,:)'*y(idx_del,:);
+                q_rr0(k,1) = sum((y(idx_del,:) - x(idx_del,:)*b0).^2,1);
 
-            b_rr_cv(:,iter2) = b0;
-            qmax_rr(:,iter2) = obj_rr( b0, lamb0 );
+                obj_lss0 = @(b)( -(  sum((y(idx_del,:) - x(idx_del,:)*b).^2,1)/(nk) + lamb0*norm(b,1)  ) );
 
-            obj_lss0 = @(b)( obj_lss(b, lamb0) );
-            [b_lss_cv(:,iter2), qmax_lss(:,iter2)] = fminsearch(obj_lss0, b0, OPTIONS);
+                result=BHHH(obj_lss0, b0, stepsize, print_or_not, maxiter, threshold);
+                b1 = result.best;
+                q_lss0(k,1) = sum((y(idx_del,:) - x(idx_del,:)*b1).^2,1);
+            end
+            
+            q_rr(iter2, 1) = sum(q_rr0,1);
+            q_lss(iter2,1) = sum(q_lss0,1);
         end
-        [~,idx_lss] = max(qmax_lss');
-        [~,idx_rr] = max(qmax_rr');
-        lamb_lss(simiter,:) = list_lamb(idx_lss);
-        lamb_rr(simiter,:) = list_lamb(idx_rr);
-        b_lss(:,simiter) = b_lss_cv(:,idx_lss);
-        b_rr(:,simiter) = b_rr_cv(:,idx_rr);
+        
+        [~,idx_rr] = min(q_rr,[],1);
+        [~,idx_lss] = min(q_lss,[],1);
+        lamb_rr_cv(simiter,:) = list_lamb(idx_rr, :);
+        lamb_lss_cv(simiter,:) = list_lamb(idx_lss, :);
+
+        b_rr(:,simiter) = inv(x'*x + lamb_rr_cv(simiter,:)*eye(p))*x'*y;
+        obj_lss0 = @(b)( -(  sum((y-x*b).^2,1)/n) + lamb_lss_cv(simiter,:)*norm(b,1)  );
+        result=BHHH(obj_lss0, b_rr(:,simiter), stepsize, print_or_not, maxiter, threshold);
+        b_lss(:,simiter) = result.best;
+
+        rsd = @(b)( (y - x*b) );
+        prd_norm = @(b)( sqrt( (b-b_true)'*(x'*x/n)*(b-b_true) ) );
 
         err1_lss(simiter,:) = norm( rsd(b_lss(:,simiter)), 1);
         err2_lss(simiter,:) = norm( rsd(b_lss(:,simiter)), 2);
@@ -75,8 +89,8 @@ for iter1 = 1
     end
 
     figure;
-    scatter(lamb_rr, lamb_lss)
-    text(min(lamb_rr)+std(lamb_rr), max(lamb_lss)-std(lamb_lss),"c1 = "+num2str(c1)+", c2 = "+num2str(c2)+", p1 = "+num2str(p1)+", p2 = "+num2str(p2))
+    scatter(lamb_rr_cv, lamb_lss_cv)
+    title("c1 = "+num2str(c1)+", c2 = "+num2str(c2)+", p1 = "+num2str(p1)+", p2 = "+num2str(p2))
     xlabel("\lambda_{Ridge}", 'fontsize', 20);
     ylabel("\lambda_{LASSO}", 'fontsize', 20);
 
@@ -93,4 +107,37 @@ for iter1 = 1
     disp("===============================")
     disp(" ")
     disp(" ")
+end
+
+%%
+function result=BHHH(qi, initial, step, print, iterlim, h)
+if nargin==2; step=0.2; print=""; iterlim=200; h=0.0001;
+elseif nargin==3; print=""; iterlim=200; h=0.0001;
+elseif nargin==4; iterlim=200; h=0.0001;
+elseif nargin==5; h=0.0001;
+end
+a0=initial; niter=0; converge=0; bestobj=sum(qi(a0),1);
+while niter<iterlim
+    gradi=gradp(a0,qi);
+    M=gradi'*gradi; M=0.5*(M+M'); %invM=inv(M);
+    invM=inv(M+0.001*eye(size(M,1)));
+    a1=a0+step*(invM)*sum(gradi,1)';
+    newobj=sum(qi(a1),1); niter=niter+1;
+    if print=="print"; disp(num2str([niter,newobj,bestobj])); end
+    if abs(newobj-bestobj)<h; converge=1;
+        disp("optimization is completed")
+        break
+    elseif newobj>bestobj; bestobj=newobj;
+    end
+    a0=a1;
+end
+result.best=a1; result.max=sum(qi(a1),1); result.converge=converge;
+end
+
+function gr=gradp(a,qi,h)
+% gr=gradp(a,qi,h)
+% Procedure for Calculating Numerical Gradient
+if nargin<3; h=0.00001; end
+n=size(qi(a),1); k=size(a,1); eyek=eye(k); gr=zeros(n,k);
+for j=1:k; hj=h*eyek(:,j); gr(:,j)=(qi(a+hj)-qi(a-hj))./(2*h); end
 end
