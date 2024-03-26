@@ -1,0 +1,71 @@
+clear; clc; close all;
+
+% Hyper-Parameters
+S = 1000; % # of Simulation Experiment
+num_grid = 2000; % # of Grid for (h1, h2)
+min_h1 = -50; max_h1 = 50; grid_h1 = linspace(min_h1, max_h1, num_grid);
+min_h2 = 0.1; max_h2 = 1000; grid_h2 = linspace(min_h2, max_h2, num_grid);
+
+set_k = [1; 10]; set_n = [100; 1000; 10000];
+setup = [kron(set_n, ones(2,1)), repmat(set_k, [3,1])]; % Simulation Setup
+
+a = 0.05; % Test Size
+cv_os = icdf('normal', 1-a, 0, 1); % Critical Value for One-sided Test
+cv_ts = icdf('normal', 1-0.5*a, 0, 1); % CV for Two-sided Test
+
+get_corr = @(h1, n)( (h1<0).*max( [-1+eps; h1/sqrt(n)] ) + (h1>0).*min( [1-eps; h1/sqrt(n)] ) );
+get_vcov = @(h1, n)[[1, get_corr(h1,n)]; [get_corr(h1,n), 1]];
+get_psi = @(h1, n, k)( randn(1, 2*k+1)*chol( blkdiag(kron( get_vcov(h1,n) , eye(k)), 1) )' );
+get_sk = @(s)( s./sqrt(s'*s) ); % Generating arbitrary vector norm(x,2)=1;
+get_AsySz_os = @(T)( mean( T>cv_os ,1) );
+get_AsySz_ts = @(T)( mean( abs(T)>cv_ts, 1 ) );
+
+result4latex = [];
+for iter1 = 1:max(size(setup))
+    disp(iter1)
+    k = setup(iter1,2); n=setup(iter1,1);
+    sk = get_sk(rand(k,1));
+
+    sup_T_ols = zeros(S,1);
+    sup_T_tsls = zeros(S,1);
+    sup_Hn = zeros(S,1);
+    parfor simiter=1:S
+        sup_T_ols0 = zeros(num_grid,1);
+        sup_T_tsls0 = zeros(num_grid,1);
+        sup_Hn0 = zeros(num_grid,1);
+        for iter2=1:num_grid
+            h1 = grid_h1(iter2);
+            psi = get_psi(h1, n, k);
+            psi_u = psi(:,1:k); psi_uv = psi(:,end);
+            xi_h2 = h1 + psi_uv + grid_h2.*(sk'*psi_u')';
+            T_ols = xi_h2./sqrt(1+grid_h2.^2);
+            T_tsls = (sk'*psi_u')';
+            Hn = ( (1+grid_h2.^2).*( (sk'*psi_u')' - xi_h2.*grid_h2./(1+grid_h2.^2) ) ).^2;
+
+            sup_T_ols0(iter2,1) = max( T_ols , [], 2);
+            sup_T_tsls0(iter2,1) = max( T_tsls, [], 2);
+            sup_Hn0(iter2,1) = max( Hn, [], 2);
+        end
+        sup_T_ols(simiter,:) = max( sup_T_ols0, [], 1 );
+        sup_T_tsls(simiter,:) = max( sup_T_tsls0, [], 1 );
+        sup_Hn(simiter,:) = max( sup_Hn0, [], 1 );
+    end
+    disp("Done")
+    AsySz_os = get_AsySz_os([sup_T_ols, sup_T_tsls, sup_Hn]);
+    AsySz_ts = get_AsySz_ts([sup_T_ols, sup_T_tsls, sup_Hn]);
+
+    result = [n, k, AsySz_os, AsySz_ts]';
+    result4latex = [result4latex; get_result4latex(result)];
+end
+%%
+function result = get_result4latex(x, threshold)
+if nargin == 1; threshold = 3; end
+result = "";
+for iter=1:max(size(x))
+    if iter<max(size(x))
+        result = result + num2str( round(x(iter,1),threshold) ) + "&";
+    else
+        result = result + num2str( round(x(iter,1),threshold) ) + "\\";
+    end
+end
+end
