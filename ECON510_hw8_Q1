@@ -1,0 +1,69 @@
+clear; clc; close all;
+
+S = 1000; % # of Simulation Experiment
+true_beta = 0;
+
+set_k = [1; 10];
+set_rho = [0; 0.5; 0.99];
+set_n = [100; 500; 2000];
+setup = [kron(set_n, ones(6,1)), repmat(kron(set_k, ones(3,1)),[3,1]), repmat(set_rho, [6,1]), ];
+var_uv = @(rho)([ [1, rho];[rho, 1]]);
+get_rp = @(tv)( mean([ abs(tv)>1.645, abs(tv)>1.96, abs(tv)>2.56 ],1) );
+get_bias = @(b)( mean(b-true_beta,1) );
+result4latex=[];
+
+for iter = 1:max(size(setup))
+    n = setup(iter,1); k = setup(iter,2); rho = setup(iter,3);
+    bhat1 = zeros(S,1); tv1 = zeros(S,1);
+    bhat2 = zeros(S,1); tv2 = zeros(S,1);
+    for simiter=1:S
+        std_uvz = chol( blkdiag(var_uv(rho), eye(k)) );
+        uvz = randn(n,2+k)*std_uvz;
+        u = uvz(:,1); v = uvz(:,2); z = uvz(:,3:end);
+        x1 = z*(ones(k,1)) + v; y1 = x1*true_beta + u;
+        x2 = z*(ones(k,1)/sqrt(n)) + v; y2 = x2*true_beta + u;
+        result1 = get_ive(y1,x1,z);
+        result2 = get_ive(y2,x2,z);
+        bhat1(simiter,:) = result1.ive; tv1(simiter,:) = result1.tv; 
+        bhat2(simiter,:) = result2.ive; tv2(simiter,:) = result2.tv;
+    end
+    disp("======================")
+    disp(" Simulation Set up")
+    disp(" n = "+num2str(n)+", k = "+num2str(k)+", rho = "+num2str(rho));
+    disp("-------------------")
+    disp("Case 1 : pi = 1")
+    disp("Bias : "+num2str( round(get_bias(bhat1),3) ))
+    disp("Rejection Probability")
+    disp(num2str( round(get_rp(tv1),3) ))
+    disp("-------------------")
+    disp("Case 1 : pi = 1/sqrt(n)")
+    disp("Bias : "+num2str( round(get_bias(bhat2),3) ))
+    disp("Rejection Probability")
+    disp(num2str( round(get_rp(tv2),3) )) 
+    disp("======================")
+    disp(" ")
+    disp(" ")
+
+    result = [n; k; rho; get_bias(bhat1); get_rp(tv1)'; get_bias(bhat2); get_rp(tv2)'];
+    result4latex = [result4latex; get_result4latex(result)];
+end
+
+function result = get_ive(y,x,z)
+w = inv(z'*z); zx = z'*x; zy = z'*y; invxzwzx = inv(zx'*w*zx);
+result.ive = invxzwzx*(zx'*w*zy);
+u2 = (y - x*result.ive).^2;
+result.vcov = invxzwzx*(zx'*w*z'*(u2.*z)*w*zx)*invxzwzx;
+result.tv = result.ive./sqrt(diag(result.vcov));
+end
+
+function result = get_result4latex(x, threshold)
+if nargin == 1; threshold = 3; end
+result = "";
+for iter=1:max(size(x))
+    if iter<max(size(x))
+        result = result + num2str( round(x(iter,1),threshold) ) + "&";
+    else
+        result = result + num2str( round(x(iter,1),threshold) ) + "\\";
+    end
+end
+end
