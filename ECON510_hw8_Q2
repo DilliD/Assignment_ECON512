@@ -2,10 +2,10 @@ clear; clc; close all;
 
 % Hyper-Parameters
 S = 20000; % # of Simulation Experiment
-num_grid = 2000; % # of Grid for (h1, h2)
+num_grid = 80; % # of Grid for (h1, h2)
 min_h1 = -50; max_h1 = 50; grid_h1 = linspace(min_h1, max_h1, num_grid);
-min_h2 = 0.1; max_h2 = 1000; grid_h2 = linspace(min_h2, max_h2, num_grid);
-
+min_h2 = 1; max_h2 = 1000; grid_h2 = linspace(min_h2, max_h2, num_grid);
+[Hx, Hy] = meshgrid(grid_h1, grid_h2);
 set_k = [1; 10]; set_n = [100; 1000; 10000];
 setup = [kron(set_n, ones(2,1)), repmat(set_k, [3,1])]; % Simulation Setup
 
@@ -15,11 +15,14 @@ cv_os = icdf('normal', 1-a, 0, 1); % Critical Value for One-sided Test
 cv_ts = icdf('normal', 1-0.5*a, 0, 1); % CV for Two-sided Test
 
 get_corr = @(h1, n)( (h1<0).*max( [-1+eps; h1/sqrt(n)] ) + (h1>0).*min( [1-eps; h1/sqrt(n)] ) );
+
 get_vcov = @(h1, n)[[1, get_corr(h1,n)]; [get_corr(h1,n), 1]];
 get_psi = @(h1, n, k)( randn(1, 2*k+1)*chol( blkdiag(kron( get_vcov(h1,n) , eye(k)), 1) )' );
 get_sk = @(s)( s./sqrt(s'*s) ); % Generating arbitrary vector norm(x,2)=1;
 get_AsySz_os = @(T)( mean( T>cv_os ,1) );
 get_AsySz_ts = @(T)( mean( abs(T)>cv_ts, 1 ) );
+
+O_GG = zeros(num_grid,num_grid);
 
 result4latex = [];
 for iter1 = 1:max(size(setup))
@@ -27,42 +30,117 @@ for iter1 = 1:max(size(setup))
     k = setup(iter1,2); n=setup(iter1,1);
     sk = get_sk(rand(k,1));
 
-    sup_T_ols = zeros(S,1);
-    sup_T_tsls = zeros(S,1);
-    sup_Hn = zeros(S,1);
-    sup_T_pretest = zeros(S,1);
-    parfor simiter=1:S
-        sup_T_ols0 = zeros(num_grid,1);
-        sup_T_tsls0 = zeros(num_grid,1);
-        sup_Hn0 = zeros(num_grid,1);
-        sup_T_pretest0 = zeros(num_grid, 1);
-        for iter2=1:num_grid
-            h1 = grid_h1(iter2);
-            psi = get_psi(h1, n, k);
-            psi_u = psi(:,1:k); psi_uv = psi(:,end);
-            xi_h2 = h1 + psi_uv + grid_h2.*(sk'*psi_u')';
-            T_ols = xi_h2./sqrt(1+grid_h2.^2);
-            T_tsls = (sk'*psi_u')';
-            Hn = ( (1+grid_h2.^2).*( (sk'*psi_u')' - xi_h2.*grid_h2./(1+grid_h2.^2) ) ).^2;
-            T_pretest = T_ols.*(Hn<=cv_chi) + T_tsls.*(Hn>cv_chi);
+    rp_ols_os = O_GG; rp_tsls_os = O_GG; rp_Hn_os = O_GG; rp_pre_os = O_GG;
+    rp_ols_ts = O_GG; rp_tsls_ts = O_GG; rp_Hn_ts = O_GG; rp_pre_ts = O_GG;
+    for iter2=1:num_grid
+        h1 = grid_h1(iter2);
+        T_ols = zeros(S,num_grid);
+        T_tsls = zeros(S,num_grid);
+        Hn = zeros(S,num_grid);
+        T_pretest = zeros(S,num_grid);
 
-            sup_T_ols0(iter2,1) = max( T_ols , [], 2);
-            sup_T_tsls0(iter2,1) = max( T_tsls, [], 2);
-            sup_Hn0(iter2,1) = max( Hn, [], 2);
-            sup_T_pretest0(iter2,1) = max( T_pretest, [], 2);
-        end
-        sup_T_ols(simiter,:) = max( sup_T_ols0, [], 1 );
-        sup_T_tsls(simiter,:) = max( sup_T_tsls0, [], 1 );
-        sup_Hn(simiter,:) = max( sup_Hn0, [], 1 );
-        sup_T_pretest(simiter,:) = max( sup_T_pretest0, [], 1 );
+        psi = get_psi(h1, S, k);
+        psi_u = psi(:,1:k); psi_uv = psi(:,end);
+        xi_h2 = h1 + psi_uv + grid_h2.*(sk'*psi_u')';
+        T_ols = xi_h2./sqrt(1+grid_h2.^2);
+        T_tsls = (sk'*psi_u')';
+        Hn = ( (1+grid_h2.^2).*( (sk'*psi_u')' - xi_h2.*grid_h2./(1+grid_h2.^2) ) ).^2;
+        T_pretest = T_ols.*(Hn<=cv_chi) + T_tsls.*(Hn>cv_chi);
+
+        rp_ols_os(iter2,:) = get_AsySz_os(T_ols);
+        rp_tsls_os(iter2,:) = get_AsySz_os(T_tsls);
+        rp_Hn_os(iter2,:) = get_AsySz_os(Hn);
+        rp_pre_os(iter2,:) = get_AsySz_os(T_pretest);
+
+        rp_ols_ts(iter2,:) = get_AsySz_os(T_ols);
+        rp_tsls_ts(iter2,:) = get_AsySz_ts(T_tsls);
+        rp_Hn_ts(iter2,:) = get_AsySz_ts(Hn);
+        rp_pre_ts(iter2,:) = get_AsySz_ts(T_pretest);
     end
-    disp("Done")
-    AsySz_os = get_AsySz_os([sup_T_ols, sup_T_tsls, sup_Hn, sup_T_pretest]);
-    AsySz_ts = get_AsySz_ts([sup_T_ols, sup_T_tsls, sup_Hn, sup_T_pretest]);
+    sup_rp_ols_os = max( rp_ols_os(:) );
+    sup_rp_tsls_os = max( rp_tsls_os(:) );
+    sup_rp_Hn_os = max( rp_Hn_os(:) );
+    sup_rp_pre_os = max( rp_pre_os(:) );
+    result = [ n, k, sup_rp_ols_os, sup_rp_tsls_os, sup_rp_Hn_os, sup_rp_pre_os ];
 
-    result = [n, k, AsySz_os, AsySz_ts]';
+    sup_rp_ols_ts = max( rp_ols_ts(:) );
+    sup_rp_tsls_ts = max( rp_tsls_ts(:) );
+    sup_rp_Hn_ts = max( rp_Hn_ts(:) );
+    sup_rp_pre_ts = max( rp_pre_ts(:) );
+    result = [result, sup_rp_ols_ts, sup_rp_tsls_ts, sup_rp_Hn_ts, sup_rp_pre_ts ]';
+
+    disp("Done")
     result4latex = [result4latex; get_result4latex(result)];
 end
+
+%%
+figure;
+subplot(2,2,1)
+surf(grid_h1, grid_h2, rp_ols_os);
+title("t-test of OLS")
+xlabel("h_1", 'fontsize', 10);
+ylabel("h_2", 'fontsize', 10);
+zlabel("Rejection Probability", 'fontsize', 10)
+box on; grid on;
+
+subplot(2,2,2)
+surf(grid_h1, grid_h2, rp_tsls_os);
+title("t-test of TSLS")
+xlabel("h_1", 'fontsize', 10);
+ylabel("h_2", 'fontsize', 10);
+zlabel("Rejection Probability", 'fontsize', 10)
+box on; grid on;
+
+subplot(2,2,3)
+surf(grid_h1, grid_h2, rp_Hn_os);
+title("Hausman Test")
+xlabel("h_1", 'fontsize', 10);
+ylabel("h_2", 'fontsize', 10);
+zlabel("Rejection Probability", 'fontsize', 10)
+box on; grid on;
+
+subplot(2,2,4)
+surf(grid_h1, grid_h2, rp_pre_os);
+title("Two-step Test")
+xlabel("h_1", 'fontsize', 10);
+ylabel("h_2", 'fontsize', 10);
+zlabel("Rejection Probability", 'fontsize', 10)
+box on; grid on;
+
+figure;
+subplot(2,2,1)
+surf(grid_h1, grid_h2, rp_ols_ts);
+title("t-test of OLS")
+xlabel("h_1", 'fontsize', 10);
+ylabel("h_2", 'fontsize', 10);
+zlabel("Rejection Probability", 'fontsize', 10)
+box on; grid on;
+
+subplot(2,2,2)
+surf(grid_h1, grid_h2, rp_tsls_ts);
+title("t-test of TSLS")
+xlabel("h_1", 'fontsize', 10);
+ylabel("h_2", 'fontsize', 10);
+zlabel("Rejection Probability", 'fontsize', 10)
+box on; grid on;
+
+subplot(2,2,3)
+surf(grid_h1, grid_h2, rp_Hn_ts);
+title("Hausman Test")
+xlabel("h_1", 'fontsize', 10);
+ylabel("h_2", 'fontsize', 10);
+zlabel("Rejection Probability", 'fontsize', 10)
+box on; grid on;
+
+subplot(2,2,4)
+surf(grid_h1, grid_h2, rp_pre_ts);
+title("Two-step Test")
+xlabel("h_1", 'fontsize', 10);
+ylabel("h_2", 'fontsize', 10);
+zlabel("Rejection Probability", 'fontsize', 10)
+box on; grid on;
+
+
 %%
 function result = get_result4latex(x, threshold)
 if nargin == 1; threshold = 3; end
