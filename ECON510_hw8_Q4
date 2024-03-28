@@ -1,0 +1,32 @@
+clear; clc; close all;
+
+min_g = 0.001;
+max_g = 100;
+num_g = 1000;
+grid_g = linspace(min_g, max_g, num_g)';
+
+% P[max(Z,-g) < icdf('normal', 1-a, 0, 1)]
+cv99 = icdf('normal', 0.99, 0, 1);
+cv95 = icdf('normal', 0.95, 0, 1);
+cv90 = icdf('normal', 0.90, 0, 1);
+cv85 = icdf('normal', 0.85, 0, 1);
+n=20000; z = randn(n,1);
+
+for iter=1:num_g
+    g = grid_g(iter,1);
+    Pcvg(iter,1) = mean( max([z, -g*ones(n,1)],[],2) < cv99 ,1);
+    Pcvg(iter,2) = mean( max([z, -g*ones(n,1)],[],2) < cv95 ,1);
+    Pcvg(iter,3) = mean( max([z, -g*ones(n,1)],[],2) < cv90 ,1);
+    Pcvg(iter,4) = mean( max([z, -g*ones(n,1)],[],2) < cv85 ,1);
+end
+
+figure;
+plot(grid_g, Pcvg(:,1),'linewidth', 2); hold on
+plot(grid_g, Pcvg(:,2),'linewidth', 2);
+plot(grid_g, Pcvg(:,3),'linewidth', 2);
+plot(grid_g, Pcvg(:,4),'linewidth', 2); hold off
+ylabel("Coverage Probabiltiy", 'fontsize', 15);
+xlabel("g", 'fontsize', 15);
+axis([-1 max_g 0.80 1.00])
+legend("\alpha = 0.99", "\alpha = 0.95", "\alpha = 0.90", "\alpha = 0.85", 'fontsize', 15)
+grid on; box off;
