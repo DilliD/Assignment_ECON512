@@ -87,7 +87,7 @@ for iter = 1:max(size(setup))
 end
 
 function [LM, result] = get_LM_CUE(x,y,z,b)
-[n,kx] = size(x); kz = size(z,2);
+n = size(y,1);
 g=(y-x*b).*z; % n by kz
 invW = inv( g'*g/n ); % kz by kz
 D = mean( ((mean(g,1)*invW*g')' - 1).*x.*z , 1);
