@@ -1,6 +1,6 @@
 clear; clc; close all;
 
-S = 1000; % # of Simulation Experiment
+S = 5000; % # of Simulation Experiment
 true_beta = 0;
 
 set_k = [1; 10];
@@ -15,8 +15,8 @@ result4latex_H0=[];
 result4latex_H1=[];
 
 for iter = 1:max(size(setup))
-    n = setup(iter,1); k = setup(iter,2); rho = setup(iter,3);
 
+    n = setup(iter,1); k = setup(iter,2); rho = setup(iter,3);
     tv1_H0 = zeros(S,1);
     tv1_H1 = zeros(S,1);
     LM1_H0 = zeros(S,1);
@@ -33,36 +33,20 @@ for iter = 1:max(size(setup))
         u = uvz(:,1); v = uvz(:,2); z = uvz(:,3:end);
         x1 = z*(ones(k,1)) + v; y1 = x1*true_beta + u;
         x2 = z*(ones(k,1)/sqrt(n)) + v; y2 = x2*true_beta + u;
-        
-        result1 = get_ive(y1,x1,z);
-        % Get LM_CUE statistic
-        G1 = -x1'*z;  % kx by kz
-        g1=@(b)( (y1-x1*b).*z ); % n by kz
-        invW1 = @(b)( inv(g1(b)'*g1(b)/n) ); % kz by kz
-        D1 = @(b)( mean((mean(g1(b),1)*invW1(b).*g1(b) - 1).*G1,1) );
-        zeta1 = @(b)( sqrt(n)*D1(b)*invW1(b)*mean(g1(b),1)' );
-        LM1 = @(b)( zeta1(b)*inv( D1(b)*invW1(b)*D1(b)' )*zeta1(b) );
 
-        bhat1(simiter,:) = result1.ive;
-        tv1_H0(simiter,1) = (result1.ive - true_beta)./sqrt(diag(result1.vcov));
-        tv1_H1(simiter,1) = (result1.ive - (true_beta+1))./sqrt(diag(result1.vcov));
-        LM1_H0(simiter,1) = LM1(true_beta);
-        LM1_H1(simiter,1) = LM1(true_beta+1);
+        result1_ive = get_ive(y1,x1,z);
+        bhat1(simiter,:) = result1_ive.ive;
+        tv1_H0(simiter,1) = (result1_ive.ive - true_beta)./sqrt(diag(result1_ive.vcov));
+        tv1_H1(simiter,1) = (result1_ive.ive - (true_beta+2))./sqrt(diag(result1_ive.vcov));
+        [LM1_H0(simiter,1),~] = get_LM_CUE(x1,y1,z,true_beta);
+        [LM1_H1(simiter,1),~] = get_LM_CUE(x1,y1,z,true_beta+2);
 
-        result2 = get_ive(y2,x2,z);
-        % Get LM_CUE statistic
-        G2 = -x2'*z;  % kx by kz
-        g2=@(b)( (y2-x2*b).*z ); % n by kz
-        invW2 = @(b)( inv(g2(b)'*g2(b)/n) ); % kz by kz
-        D2 = @(b)( mean((mean(g2(b),1)*invW2(b).*g2(b) - 1).*G2,1) );
-        zeta2 = @(b)( sqrt(n)*D2(b)*invW2(b)*mean(g2(b),1)' );
-        LM2 = @(b)( zeta2(b)*inv( D2(b)*invW2(b)*D2(b)' )*zeta2(b) );
-
-        bhat2(simiter,:) = result2.ive;
-        tv2_H0(simiter,1) = (result2.ive - true_beta)./sqrt(diag(result2.vcov));
-        tv2_H1(simiter,1) = (result2.ive - (true_beta+1))./sqrt(diag(result2.vcov));
-        LM2_H0(simiter,1) = LM2(true_beta);
-        LM2_H1(simiter,1) = LM2(true_beta+1);
+        result2_ive = get_ive(y2,x2,z);
+        bhat2(simiter,:) = result2_ive.ive;
+        tv2_H0(simiter,1) = (result2_ive.ive - true_beta)./sqrt(diag(result2_ive.vcov));
+        tv2_H1(simiter,1) = (result2_ive.ive - (true_beta+2))./sqrt(diag(result2_ive.vcov));
+        [LM2_H0(simiter,1),~] = get_LM_CUE(x2,y2,z,true_beta);
+        [LM2_H1(simiter,1),~] = get_LM_CUE(x2,y2,z,true_beta+2);
     end
 
     disp("======================")
@@ -100,6 +84,19 @@ for iter = 1:max(size(setup))
         get_rp_t(tv1_H1)'; get_rp_chi2(LM1_H1)';
         get_rp_t(tv2_H1)'; get_rp_chi2(LM2_H1)'];
     result4latex_H1 = [result4latex_H1; get_result4latex(result_H1,2)];
+end
+
+function [LM, result] = get_LM_CUE(x,y,z,b)
+[n,kx] = size(x); kz = size(z,2);
+g=(y-x*b).*z; % n by kz
+invW = inv( g'*g/n ); % kz by kz
+D = mean( ((mean(g,1)*invW*g')' - 1).*x.*z , 1);
+zeta = sqrt(n)*D*invW*mean(g,1)';
+LM = zeta*inv( D*invW*D' )*zeta;
+result.g = g;
+result.invW = invW;
+result.D = D;
+result.zeta = zeta;
 end
 
 function result = get_ive(y,x,z)
